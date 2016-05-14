@@ -5,6 +5,7 @@ import android.content.DialogInterface;
 
 import com.dikaros.filetransfer.Config;
 import com.dikaros.filetransfer.asynet.AsyNet;
+import com.dikaros.filetransfer.bean.FileMessageList;
 import com.dikaros.filetransfer.bean.FileMsg;
 import com.dikaros.filetransfer.util.AlertUtil;
 
@@ -20,6 +21,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.util.List;
 
 import dikaros.json.JsonExtendedUtil;
 
@@ -29,7 +31,7 @@ import dikaros.json.JsonExtendedUtil;
 public class FileTransferAsyncTask extends AsyNet {
 
 
-    File file = Config.getPersonalFile();
+    File dir = Config.getPersonalFile();
     Context context;
     boolean sendFileDevice = false;
     InetAddress serverIp;
@@ -48,8 +50,8 @@ public class FileTransferAsyncTask extends AsyNet {
         this.socket = socket;
     }
 
-    public void setFile(File file) {
-        this.file = file;
+    public void setDir(File dir) {
+        this.dir = dir;
     }
 
     //同意传输
@@ -65,9 +67,17 @@ public class FileTransferAsyncTask extends AsyNet {
     public final static int RECEIVE_COMPLETE = 0xf;
 
 
+    //发送多个文件
+    List<File> sendFileList;
 
 
+    public void setSendFileList(List<File> sendFileList) {
+        this.sendFileList = sendFileList;
+    }
 
+    public List<File> getSendFileList() {
+        return sendFileList;
+    }
 
     @Override
     protected Object doInBackground(Object[] params) {
@@ -76,7 +86,7 @@ public class FileTransferAsyncTask extends AsyNet {
             final OutputStream os = socket.getOutputStream();
             final InputStream is = socket.getInputStream();
             //
-            if (file!=null&&file.exists()){
+            if (sendFileList!=null&&sendFileList.size()>0){
 
 
 
@@ -87,15 +97,16 @@ public class FileTransferAsyncTask extends AsyNet {
                  */
                 if (sendFileDevice){
                     //1.发送文件信息到接收端
-                    FileMsg fileMsg = new FileMsg(file);
-                    String message = JsonExtendedUtil.generateJson(fileMsg);
-                    //获取输出流
+                    FileMessageList messageList = new FileMessageList(sendFileList);
+//                        FileMsg fileMsg = new FileMsg(file);
+                        String message = JsonExtendedUtil.generateJson(messageList);
+                        //获取输出流
 
-                    //发送文件信息
-                    BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os));
-                    writer.write(message);
-                    writer.newLine();
-                    writer.flush();
+                        //发送文件信息
+                        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os));
+                        writer.write(message);
+                        writer.newLine();
+                        writer.flush();
                     //2.等待接收信息
                     //回复信息
 
@@ -104,19 +115,24 @@ public class FileTransferAsyncTask extends AsyNet {
                     switch (replyMsg){
                         //接收方同意传输文件
                         case ALLOW_TRANSFER:
-                            //创建文件输入流读取文件信息
-                            FileInputStream fis = new FileInputStream(file);
-                            byte [] buff = new byte[1024];
-                            int len = -1;
-                            long sended = 0;
-                            while((len = fis.read(buff))!=-1){
-                                os.write(buff,0,len);
-                                sended +=len;
-                                //发送进度信息，以百分比的形式
-                                publishProgress(new Integer[]{(int)(sended*100/file.length())});
+                            FileInputStream fis = null;
+                            for (int i = 0; i < sendFileList.size(); i++) {
+                                File file = sendFileList.get(i);
+                                //创建文件输入流读取文件信息
+                                fis = new FileInputStream(file);
+                                byte [] buff = new byte[1024];
+                                int len = -1;
+                                long sended = 0;
+                                while((len = fis.read(buff))!=-1){
+                                    os.write(buff,0,len);
+                                    sended +=len;
+                                    //发送进度信息，以百分比的形式,第一个参数为百分比，第二个是文件位置
+                                    publishProgress(new Integer[]{(int)(sended*100/file.length()),i});
+                                }
+
+                                os.flush();
                             }
 
-                            os.flush();
                             AlertUtil.toastMess(context,"发送完成");
                             //发送文件传输完成帧
                             os.write(SEND_COMPLETE);
@@ -155,26 +171,34 @@ public class FileTransferAsyncTask extends AsyNet {
                     BufferedReader reader = new BufferedReader(new InputStreamReader(is));
                     //文件json信息
                     final String fileMsg = reader.readLine();
-                    final FileMsg msg = (FileMsg) JsonExtendedUtil.compileJson(FileMsg.class,fileMsg);
-                    AlertUtil.judgeAlertDialog(context, "传输文件", "对方发来了一个文件" + msg.getName() + "大小为" + generateSize(msg.getLength()) + "类型为" + msg.getType(), new DialogInterface.OnClickListener() {
+                    final FileMessageList msgs = (FileMessageList) JsonExtendedUtil.compileJson(FileMessageList.class,fileMsg);
+
+                    AlertUtil.judgeAlertDialog(context, "传输文件", msgs.getInfo(), new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             dialog.dismiss();
+
                             try {
                                 //发送同意传输信息
                                 os.write(ALLOW_TRANSFER);
                                 //创建一个新的文件输出流
-                                FileOutputStream fos = new FileOutputStream(file.getAbsolutePath()+"/"+msg.getName());
-                                int len = -1;
-                                byte []buff = new byte[1024];
-                                long received = 0;
-                                while ((is.read(buff))!=-1){
-                                    fos.write(buff,0,len);
-                                    received+=len;
-                                    //发送进度
-                                    publishProgress(new Integer[]{(int)(received*100/msg.getLength())});
+                                FileOutputStream fos = null;
+                                for (int i = 0; i < msgs.getCount(); i++) {
+                                    FileMsg msg= msgs.getMsgs().get(i);
+                                    fos = new FileOutputStream(dir.getAbsolutePath()+"/"+msg.getName());
+                                    int len = -1;
+                                    byte []buff = new byte[1024];
+                                    long received = 0;
+                                    while ((is.read(buff))!=-1){
+                                        fos.write(buff,0,len);
+                                        received+=len;
+                                        //发送进度
+                                        publishProgress(new Integer[]{(int)(received*100/msg.getLength()),i});
+                                    }
+                                    fos.flush();
                                 }
-                                fos.flush();
+
+
                                 int receiveFinish= is.read();
                                 if (receiveFinish==SEND_COMPLETE){
                                     AlertUtil.toastMess(context,"对方发送完成");
@@ -238,8 +262,8 @@ public class FileTransferAsyncTask extends AsyNet {
     }
 
 
-    public void execute(File file,boolean sendFileDevice){
-        this.file = file;
+    public void execute(List<File> files,boolean sendFileDevice){
+        this.sendFileList = files;
         this.sendFileDevice = sendFileDevice;
         super.execute();
     }

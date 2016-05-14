@@ -17,6 +17,8 @@ public class FileMsg implements Jsonable {
     String name;
     @JsonParam(name = "type")
     String type;
+    @JsonParam(name = "other")
+    String other;
 
     public FileMsg(File file){
         this.length = file.length();
@@ -44,5 +46,13 @@ public class FileMsg implements Jsonable {
 
     public String getType() {
         return type;
+    }
+
+    public String getOther() {
+        return other;
+    }
+
+    public void setOther(String other) {
+        this.other = other;
     }
 }

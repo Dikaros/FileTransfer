@@ -28,4 +28,20 @@ public class Config {
     }
 
     public static boolean isSenerDevice = false;
+    public static String generateFileSize(long result) {
+        long gb = 2 << 29;
+        long mb = 2 << 19;
+        long kb = 2 << 9;
+        // return String.format("%.2fGB",result/gb);
+        if (result < kb) {
+            return result + "B";
+        } else if (result >= kb && result < mb) {
+            return String.format("%.2fKB", result / (double) kb);
+        } else if (result >= mb && result < gb) {
+            return String.format("%.2fMB", result / (double) mb);
+        } else if (result >= gb) {
+            return String.format("%.2fGB", result / (double) gb);
+        }
+        return null;
+    }
 }

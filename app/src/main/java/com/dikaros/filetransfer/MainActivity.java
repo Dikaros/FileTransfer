@@ -116,7 +116,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
+    /**
+     * 连接到owner
+     */
     public void connectToOwner(){
         new Thread(){
             @Override
@@ -141,7 +143,9 @@ public class MainActivity extends AppCompatActivity {
     private void serverConnected(Socket socket){
         FileTransferAsyncTask transferAsyncTask = new FileTransferAsyncTask(this,socket,Config.CONNECTED_OWNER_IP);
         if (isSender){
-            transferAsyncTask.setFile(new File(""));
+//            transferAsyncTask.setSendFileListile(new File(""));
+
+            //设置并发送文件
         }
         transferAsyncTask.execute(isSender);
     }
